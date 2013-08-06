@@ -6,12 +6,17 @@
 
 #include "mruby.h"
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netdb.h>
+#ifndef _WIN32
+# include <sys/socket.h>
+# include <sys/un.h>
+# include <netinet/in.h>
+# include <arpa/inet.h>
+# include <fcntl.h>
+# include <netdb.h>
+#else
+# define _WIN32_WINNT 0x0600
+# include <ws2tcpip.h>
+#endif
 #include <stddef.h>
 #include <string.h>
 #include <unistd.h>
@@ -26,6 +31,40 @@
 
 #define E_SOCKET_ERROR             (mrb_class_get(mrb, "SocketError"))
 
+#ifdef _WIN32
+# define SHUT_RDWR SD_BOTH
+# define AI_NUMERICSERV AI_NUMERICHOST
+# define inet_pton(x,y,z) InetPton(x,y,z)
+# define sockaddr_un sockaddr
+const char*
+inet_ntop(int af, const void* src, char* dst, int cnt) {
+  struct sockaddr_in srcaddr;
+  memset(&srcaddr, 0, sizeof(struct sockaddr_in));
+  memcpy(&(srcaddr.sin_addr), src, sizeof(srcaddr.sin_addr));
+  srcaddr.sin_family = af;
+  if (WSAAddressToString((struct sockaddr*) &srcaddr, sizeof(struct sockaddr_in), 0, dst, (LPDWORD) &cnt) != 0) {
+    int le = WSAGetLastError();
+    if (le == WSAEINVAL)
+      return 0;
+    errno = le;
+    return NULL;
+  }
+  return dst;
+}
+int
+inet_aton(const char *cp, struct in_addr *addr) {
+  addr->s_addr = inet_addr(cp);
+  return (addr->s_addr == INADDR_NONE) ? 0 : 1;
+}
+const char*
+inet_pton(int af, const char *src, void *dst) {
+  if (af != AF_INET) {
+    errno = WSAEAFNOSUPPORT;
+    return -1;
+  }
+  return inet_aton(src, dst);
+}
+#endif
 
 static mrb_value
 mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
@@ -131,12 +170,17 @@ mrb_addrinfo_getnameinfo(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_addrinfo_unix_path(mrb_state *mrb, mrb_value self)
 {
+#ifndef _WIN32
   mrb_value sastr;
 
   sastr = mrb_iv_get(mrb, self, mrb_intern(mrb, "@sockaddr"));
   if (((struct sockaddr *)RSTRING_PTR(sastr))->sa_family != AF_UNIX)
     mrb_raise(mrb, E_SOCKET_ERROR, "need AF_UNIX address");
   return mrb_str_new_cstr(mrb, ((struct sockaddr_un *)RSTRING_PTR(sastr))->sun_path);
+#else
+  mrb_raise(mrb, E_NOTIMPL, "unix_path is not implemented yet");
+  return mrb_nil_value();
+#endif
 }
 
 static mrb_value
@@ -326,6 +370,7 @@ mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &bool);
   fd = socket_fd(mrb, self);
 
+#ifndef _WIN32
   flags = fcntl(fd, F_GETFL, 0);
   if (flags == 1)
     mrb_sys_fail(mrb, "fcntl");
@@ -335,6 +380,9 @@ mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
     flags &= ~O_NONBLOCK;
   if (fcntl(fd, F_SETFL, flags) == -1)
     mrb_sys_fail(mrb, "fcntl");
+#else
+  // TODO
+#endif
   return mrb_nil_value();
 }
 
@@ -650,6 +698,7 @@ mrb_socket_sockaddr_family(mrb_state *mrb, mrb_value klass)
 static mrb_value
 mrb_socket_sockaddr_un(mrb_state *mrb, mrb_value klass)
 {
+#ifndef _WIN32
   struct sockaddr_un *sunp;
   mrb_value path, s;
   
@@ -664,11 +713,16 @@ mrb_socket_sockaddr_un(mrb_state *mrb, mrb_value klass)
   sunp->sun_path[RSTRING_LEN(path)] = '\0';
   mrb_str_resize(mrb, s, sizeof(struct sockaddr_un));
   return s;
+#else
+  mrb_raise(mrb, E_NOTIMPL, "sockaddr_un is not implemented yet");
+  return mrb_nil_value();
+#endif
 }
 
 static mrb_value
 mrb_socket_socketpair(mrb_state *mrb, mrb_value klass)
 {
+#ifndef _WIN32
   mrb_value ary;
   mrb_int domain, type, protocol;
   int sv[2];
@@ -682,6 +736,10 @@ mrb_socket_socketpair(mrb_state *mrb, mrb_value klass)
   mrb_ary_push(mrb, ary, mrb_fixnum_value(sv[0]));
   mrb_ary_push(mrb, ary, mrb_fixnum_value(sv[1]));
   return ary;
+#else
+  mrb_raise(mrb, E_NOTIMPL, "socketpair is not implemented yet");
+  return mrb_nil_value();
+#endif
 }
 
 static mrb_value
@@ -771,6 +829,12 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   } while (0)
 
 #include "const.cstub"
+#ifdef _WIN32
+  {
+    WSADATA wsad;
+    WSAStartup(MAKEWORD(2, 0), &wsad);
+  }
+#endif
 }
 
 void
@@ -781,4 +845,7 @@ mrb_mruby_socket_gem_final(mrb_state* mrb)
   if (mrb_voidp_p(ai)) {
     freeaddrinfo(mrb_voidp(ai));
   }
+#ifdef _WIN32
+  WSACleanup();
+#endif
 }
