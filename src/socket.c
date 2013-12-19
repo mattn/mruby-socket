@@ -151,7 +151,7 @@ mrb_addrinfo_getnameinfo(mrb_state *mrb, mrb_value self)
   host = mrb_str_buf_new(mrb, NI_MAXHOST);
   serv = mrb_str_buf_new(mrb, NI_MAXSERV);
 
-  sastr = mrb_iv_get(mrb, self, mrb_intern(mrb, "@sockaddr"));
+  sastr = mrb_iv_get(mrb, self, mrb_intern_cstr(mrb, "@sockaddr"));
   if (!mrb_string_p(sastr)) {
     mrb_raise(mrb, E_SOCKET_ERROR, "invalid sockaddr");
   }
@@ -173,7 +173,7 @@ mrb_addrinfo_unix_path(mrb_state *mrb, mrb_value self)
 #ifndef _WIN32
   mrb_value sastr;
 
-  sastr = mrb_iv_get(mrb, self, mrb_intern(mrb, "@sockaddr"));
+  sastr = mrb_iv_get(mrb, self, mrb_intern_cstr(mrb, "@sockaddr"));
   if (((struct sockaddr *)RSTRING_PTR(sastr))->sa_family != AF_UNIX)
     mrb_raise(mrb, E_SOCKET_ERROR, "need AF_UNIX address");
   return mrb_str_new_cstr(mrb, ((struct sockaddr_un *)RSTRING_PTR(sastr))->sun_path);
@@ -296,7 +296,7 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   optlen = sizeof(opt);
   if (getsockopt(s, level, optname, &opt, &optlen) == -1)
     mrb_sys_fail(mrb, "getsockopt");
-  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern(mrb, "Option"));
+  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern_cstr(mrb, "Option"));
   family = socket_family(s);
   data = mrb_str_new(mrb, (char *)&opt, sizeof(int));
   return mrb_funcall(mrb, c, "new", 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
