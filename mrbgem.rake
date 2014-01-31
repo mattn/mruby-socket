@@ -8,5 +8,5 @@ MRuby::Gem::Specification.new('mruby-socket') do |spec|
   end
 
   spec.add_dependency('mruby-io')
-  spec.add_dependency('mruby-mtest')
+  # spec.add_dependency('mruby-mtest')
 end
