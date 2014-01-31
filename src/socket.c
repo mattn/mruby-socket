@@ -303,6 +303,12 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
+mrb_basicsocket_close(mrb_state *mrb, mrb_value self) {
+  closesocket((SOCKET)socket_fd(mrb, self));
+  return mrb_nil_value();
+}
+
+static mrb_value
 mrb_basicsocket_recv(mrb_state *mrb, mrb_value self)
 { 
   int n;
@@ -776,6 +782,7 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, bsock, "getpeername", mrb_basicsocket_getpeername, ARGS_NONE());
   mrb_define_method(mrb, bsock, "getsockname", mrb_basicsocket_getsockname, ARGS_NONE());
   mrb_define_method(mrb, bsock, "getsockopt", mrb_basicsocket_getsockopt, ARGS_REQ(2));
+  mrb_define_method(mrb, bsock, "close", mrb_basicsocket_close, ARGS_NONE());
   mrb_define_method(mrb, bsock, "recv", mrb_basicsocket_recv, ARGS_REQ(1)|ARGS_OPT(1));
   // #recvmsg(maxlen, flags=0)
   mrb_define_method(mrb, bsock, "send", mrb_basicsocket_send, ARGS_REQ(2)|ARGS_OPT(1));
