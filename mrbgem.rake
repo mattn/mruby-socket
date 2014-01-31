@@ -6,4 +6,7 @@ MRuby::Gem::Specification.new('mruby-socket') do |spec|
   if ENV['OS'] == 'Windows_NT'
     spec.linker.libraries << ['ws2_32']
   end
+
+  spec.add_dependency('mruby-io')
+  spec.add_dependency('mruby-mtest')
 end
