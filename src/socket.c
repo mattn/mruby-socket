@@ -751,7 +751,7 @@ void
 mrb_mruby_socket_gem_final(mrb_state* mrb)
 {
   mrb_value ai;
-  ai = mrb_mod_cv_get(mrb, mrb_class_get(mrb, "Addrinfo"), mrb_intern_lit(mrb, "_lastai"));
+  ai = mrb_mod_cv_get(mrb, mrb_module_get(mrb, "Addrinfo"), mrb_intern_lit(mrb, "_lastai"));
   if (mrb_voidp_p(ai)) {
     freeaddrinfo(mrb_voidp(ai));
   }
