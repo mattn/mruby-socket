@@ -296,7 +296,7 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   optlen = sizeof(opt);
   if (getsockopt(s, level, optname, &opt, &optlen) == -1)
     mrb_sys_fail(mrb, "getsockopt");
-  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
+  c = mrb_const_get(mrb, mrb_obj_value(mrb_module_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
   family = socket_family(s);
   data = mrb_str_new(mrb, (char *)&opt, sizeof(int));
   return mrb_funcall(mrb, c, "new", 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
