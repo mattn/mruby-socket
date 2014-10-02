@@ -139,6 +139,21 @@ class Addrinfo
   attr_reader :protocol
   attr_reader :socktype
 
+  def _to_array
+    case @family
+    when Socket::AF_INET
+      s = "AF_INET"
+    when Socket::AF_INET6
+      s = "AF_INET6"
+    when Socket::AF_UNIX
+      s = "AF_UNIX"
+    else
+      s = "(unknown AF)"
+    end
+    addr, port = self.getnameinfo(Socket::NI_NUMERICHOST|Socket::NI_NUMERICSERV)
+    [ s, port.to_i, addr, addr ]
+  end
+
   def to_sockaddr 
     @sockaddr
   end
@@ -189,42 +204,27 @@ class BasicSocket
 end
 
 class IPSocket
-  def self.getddress(host)
+  def self.getaddress(host)
     Addrinfo.ip(host).ip_address
   end
 
-  def _ai_to_array(ai)
-    case ai.afamily
-    when Socket::AF_INET
-      s = "AF_INET"
-    when Socket::AF_INET6
-      s = "AF_INET6"
-    when Socket::AF_UNIX
-      s = "AF_UNIX"
-    else
-      s = "(unknown AF)"
-    end
-    [ s, ai.ip_port, ai.ip_address, ai.ip_address ]
-  end
-
   def addr
-    _ai_to_array(Addrinfo.new(self.getsockname))
+    Addrinfo.new(self.getsockname)._to_array
   end
 
   def peeraddr
-    _ai_to_array(Addrinfo.new(self.getpeername))
+    Addrinfo.new(self.getpeername)._to_array
   end
 
   def recvfrom(maxlen, flags=0)
     msg, sa = _recvfrom(maxlen, flags)
-    [ msg, _ai_to_array(Addrinfo.new(sa)) ]
+    [ msg, Addrinfo.new(sa)._to_array ]
   end
 end
 
 class TCPSocket
   def initialize(host, service, local_host=nil, local_service=nil)
-    self._bless
-    if self.is_a? TCPServer
+    if @init_with_fd
       super(host, service)
     else
       s = nil
@@ -243,13 +243,20 @@ class TCPSocket
     end
   end
 
+  def self.new_with_prelude pre, *args
+    o = self._allocate
+    o.instance_eval(&pre)
+    o.initialize(*args)
+    o
+  end
+
   #def self.gethostbyname(host)
 end
 
 class TCPServer
   def initialize(host=nil, service)
-    self._bless
     ai = Addrinfo.getaddrinfo(host, service, nil, nil, nil, Socket::AI_PASSIVE)[0]
+    @init_with_fd = true
     super(Socket._socket(ai.afamily, Socket::SOCK_STREAM, 0), "r+")
     Socket._bind(self.fileno, ai.to_sockaddr)
     listen(5)
@@ -257,7 +264,13 @@ class TCPServer
   end
 
   def accept
-    TCPSocket.for_fd(self.sysaccept)
+    fd = self.sysaccept
+    begin
+      TCPSocket.new_with_prelude(proc { @init_with_fd = true }, fd, "r+")
+    rescue
+      IO._sysclose(fd) rescue nil
+      raise
+    end
   end
 
   def accept_nonblock
@@ -281,7 +294,6 @@ end
 
 class UDPSocket
   def initialize(af=Socket::AF_INET)
-    self._bless
     super(Socket._socket(af, Socket::SOCK_DGRAM, 0), "r+")
     @af = af
     self
@@ -326,15 +338,21 @@ end
 
 class Socket
   def initialize(domain, type, protocol=0)
-    self._bless
     super(Socket._socket(domain, type, protocol), "r+")
   end
 
   #def self.accept_loop
 
-  # def self.getaddrinfo
-    # by Addrinfo.getaddrinfo
-  #end
+  def self.getaddrinfo(nodename, servname, family=nil, socktype=nil, protocol=nil, flags=0)
+    Addrinfo.getaddrinfo(nodename, servname, family, socktype, protocol, flags).map { |ai|
+      ary = ai._to_array
+      ary[2] = nodename
+      ary[4] = ai.afamily
+      ary[5] = ai.socktype
+      ary[6] = ai.protocol
+      ary
+    }
+  end
 
   #def self.getnameinfo
   #def self.ip_address_list
@@ -395,7 +413,7 @@ class Socket
 
   def connect(sockaddr)
     sockaddr = sockaddr.to_sockaddr if sockaddr.is_a? Addrinfo
-    Socket._bind(self.fileno, sockaddr)
+    Socket._connect(self.fileno, sockaddr)
     0
   end
 
@@ -436,7 +454,6 @@ end
 
 class UNIXSocket
   def initialize(path, &block)
-    self._bless
     super(Socket._socket(AF_UNIX, SOCK_STREAM, 0), "r+")
     Socket._connect(self.fileno, Socket.sockaddr_un(path))
     if block
@@ -479,7 +496,6 @@ end
 
 class UNIXServer
   def initialize(path, &block)
-    self._bless
     super(Socket._socket(Socket::AF_UNIX, Socket::SOCK_STREAM, 0), "r")
     Socket._bind(self.fileno, Socket.pack_sockaddr_un(path))
     listen(5)

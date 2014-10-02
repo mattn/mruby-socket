@@ -115,8 +115,8 @@ mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
   }
 
   lastai = mrb_cv_get(mrb, klass, mrb_intern_lit(mrb, "_lastai"));
-  if (mrb_voidp_p(lastai)) {
-    freeaddrinfo(mrb_voidp(lastai));
+  if (mrb_cptr_p(lastai)) {
+    freeaddrinfo(mrb_cptr(lastai));
     mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_nil_value());
   }
 
@@ -124,7 +124,7 @@ mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
   if (error) {
     mrb_raisef(mrb, E_SOCKET_ERROR, "getaddrinfo: %S", mrb_str_new_cstr(mrb, gai_strerror(error)));
   }
-  mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_voidp_value(mrb, res0));
+  mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_cptr_value(mrb, res0));
 
   for (res = res0; res != NULL; res = res->ai_next) {
     sa = mrb_str_new(mrb, (void *)res->ai_addr, res->ai_addrlen);
@@ -178,7 +178,7 @@ mrb_addrinfo_unix_path(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_SOCKET_ERROR, "need AF_UNIX address");
   return mrb_str_new_cstr(mrb, ((struct sockaddr_un *)RSTRING_PTR(sastr))->sun_path);
 #else
-  mrb_raise(mrb, E_NOTIMPL, "unix_path is not implemented yet");
+  mrb_raise(mrb, E_RUNTIME_ERROR, "unix_path is not implemented yet");
   return mrb_nil_value();
 #endif
 }
@@ -296,7 +296,7 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   optlen = sizeof(opt);
   if (getsockopt(s, level, optname, &opt, &optlen) == -1)
     mrb_sys_fail(mrb, "getsockopt");
-  c = mrb_const_get(mrb, mrb_obj_value(mrb_module_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
+  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
   family = socket_family(s);
   data = mrb_str_new(mrb, (char *)&opt, sizeof(int));
   return mrb_funcall(mrb, c, "new", 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
@@ -623,7 +623,7 @@ mrb_socket_sockaddr_un(mrb_state *mrb, mrb_value klass)
   mrb_str_resize(mrb, s, sizeof(struct sockaddr_un));
   return s;
 #else
-  mrb_raise(mrb, E_NOTIMPL, "sockaddr_un is not implemented yet");
+  mrb_raise(mrb, E_RUNTIME_ERROR, "sockaddr_un is not implemented yet");
   return mrb_nil_value();
 #endif
 }
@@ -646,7 +646,7 @@ mrb_socket_socketpair(mrb_state *mrb, mrb_value klass)
   mrb_ary_push(mrb, ary, mrb_fixnum_value(sv[1]));
   return ary;
 #else
-  mrb_raise(mrb, E_NOTIMPL, "socketpair is not implemented yet");
+  mrb_raise(mrb, E_RUNTIME_ERROR, "socketpair is not implemented yet");
   return mrb_nil_value();
 #endif
 }
@@ -751,9 +751,9 @@ void
 mrb_mruby_socket_gem_final(mrb_state* mrb)
 {
   mrb_value ai;
-  ai = mrb_mod_cv_get(mrb, mrb_module_get(mrb, "Addrinfo"), mrb_intern_lit(mrb, "_lastai"));
-  if (mrb_voidp_p(ai)) {
-    freeaddrinfo(mrb_voidp(ai));
+  ai = mrb_mod_cv_get(mrb, mrb_class_get(mrb, "Addrinfo"), mrb_intern_lit(mrb, "_lastai"));
+  if (mrb_cptr_p(ai)) {
+    freeaddrinfo(mrb_cptr(ai));
   }
 #ifdef _WIN32
   WSACleanup();
