@@ -772,6 +772,12 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
     mrb_define_const(mrb, constants, #SYM, mrb_fixnum_value(SYM));	\
   } while (0)
 
+#ifndef IPPROTO_TCP
+# define IPPROTO_TCP 6
+#endif
+#ifndef IPPROTO_UDP
+# define IPPROTO_UDP 17
+#endif
 #include "const.cstub"
 #ifdef _WIN32
   {
