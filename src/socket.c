@@ -14,13 +14,13 @@
 # include <arpa/inet.h>
 # include <fcntl.h>
 # include <netdb.h>
+# include <unistd.h>
 #else
 # define _WIN32_WINNT 0x0600
 # include <ws2tcpip.h>
 #endif
 #include <stddef.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "mruby/array.h"
 #include "mruby/class.h"
@@ -39,9 +39,18 @@
 
 #ifdef _WIN32
 # define SHUT_RDWR SD_BOTH
-# define AI_NUMERICSERV AI_NUMERICHOST
+# ifndef AI_NUMERICSERV
+#  define AI_NUMERICSERV AI_NUMERICHOST
+# endif
 # define inet_pton(x,y,z) InetPton(x,y,z)
 # define sockaddr_un sockaddr
+
+int
+inet_aton(const char *cp, struct in_addr *addr) {
+  addr->s_addr = inet_addr(cp);
+  return (addr->s_addr == INADDR_NONE) ? 0 : 1;
+}
+# if (NTDDI_VERSION < NTDDI_VISTA) || !defined(_MSC_VER)
 const char*
 inet_ntop(int af, const void* src, char* dst, int cnt) {
   struct sockaddr_in srcaddr;
@@ -58,11 +67,6 @@ inet_ntop(int af, const void* src, char* dst, int cnt) {
   return dst;
 }
 int
-inet_aton(const char *cp, struct in_addr *addr) {
-  addr->s_addr = inet_addr(cp);
-  return (addr->s_addr == INADDR_NONE) ? 0 : 1;
-}
-const char*
 inet_pton(int af, const char *src, void *dst) {
   if (af != AF_INET) {
     errno = WSAEAFNOSUPPORT;
@@ -70,6 +74,7 @@ inet_pton(int af, const char *src, void *dst) {
   }
   return inet_aton(src, dst);
 }
+# endif
 #endif
 
 static mrb_value
@@ -732,12 +737,12 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   mrb_define_class_method(mrb, sock, "_socket", mrb_socket_socket, MRB_ARGS_REQ(3));
   //mrb_define_class_method(mrb, sock, "gethostbyaddr", mrb_socket_gethostbyaddr, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   //mrb_define_class_method(mrb, sock, "gethostbyname", mrb_socket_gethostbyname, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
-  mrb_define_class_method(mrb, sock, "gethostname", mrb_socket_gethostname, ARGS_NONE());
+  mrb_define_class_method(mrb, sock, "gethostname", mrb_socket_gethostname, MRB_ARGS_NONE());
   //mrb_define_class_method(mrb, sock, "getservbyname", mrb_socket_getservbyname, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   //mrb_define_class_method(mrb, sock, "getservbyport", mrb_socket_getservbyport, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   mrb_define_class_method(mrb, sock, "sockaddr_un", mrb_socket_sockaddr_un, MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, sock, "socketpair", mrb_socket_socketpair, MRB_ARGS_REQ(3));
-  //mrb_define_method(mrb, sock, "sysaccept", mrb_socket_accept, ARGS_NONE());
+  //mrb_define_method(mrb, sock, "sysaccept", mrb_socket_accept, MRB_ARGS_NONE());
 
   usock = mrb_define_class(mrb, "UNIXSocket", io);
   //mrb_define_class_method(mrb, usock, "pair", mrb_unixsocket_open, MRB_ARGS_OPT(2));
