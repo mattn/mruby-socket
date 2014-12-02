@@ -580,7 +580,7 @@ static mrb_value
 mrb_socket_bind(mrb_state *mrb, mrb_value klass)
 {
   mrb_value sastr;
-  int s;
+  mrb_int s;
 
   mrb_get_args(mrb, "iS", &s, &sastr);
   if (bind(s, (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
@@ -593,7 +593,7 @@ static mrb_value
 mrb_socket_connect(mrb_state *mrb, mrb_value klass)
 {
   mrb_value sastr;
-  int s;
+  mrb_int s;
 
   mrb_get_args(mrb, "iS", &s, &sastr);
   if (connect(s, (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
@@ -605,7 +605,7 @@ mrb_socket_connect(mrb_state *mrb, mrb_value klass)
 static mrb_value
 mrb_socket_listen(mrb_state *mrb, mrb_value klass)
 {
-  int backlog, s;
+  mrb_int backlog, s;
 
   mrb_get_args(mrb, "ii", &s, &backlog);
   if (listen(s, backlog) == -1) {
