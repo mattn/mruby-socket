@@ -28,6 +28,9 @@
 #include "mruby/string.h"
 #include "mruby/variable.h"
 #include "error.h"
+#ifdef _WIN32
+# include "../../mruby-io/include/mruby/ext/io.h"
+#endif
 
 #define E_SOCKET_ERROR             (mrb_class_get(mrb, "SocketError"))
 
@@ -313,11 +316,19 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   return mrb_funcall(mrb, c, "new", 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
 }
 
+#ifdef _WIN32
+
 static mrb_value
 mrb_basicsocket_close(mrb_state *mrb, mrb_value self) {
-  closesocket((SOCKET)socket_fd(mrb, self));
+  struct mrb_io *fptr = (struct mrb_io *)DATA_PTR(self);
+  if (fptr->fd >= 0) {
+    closesocket((SOCKET)fptr->fd);
+    fptr->fd = -1;
+  }
   return mrb_nil_value();
 }
+
+#endif
 
 static mrb_value
 mrb_basicsocket_recv(mrb_state *mrb, mrb_value self)
@@ -707,7 +718,9 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, bsock, "getpeername", mrb_basicsocket_getpeername, MRB_ARGS_NONE());
   mrb_define_method(mrb, bsock, "getsockname", mrb_basicsocket_getsockname, MRB_ARGS_NONE());
   mrb_define_method(mrb, bsock, "getsockopt", mrb_basicsocket_getsockopt, MRB_ARGS_REQ(2));
+#ifdef _WIN32
   mrb_define_method(mrb, bsock, "close", mrb_basicsocket_close, MRB_ARGS_NONE());
+#endif
   mrb_define_method(mrb, bsock, "recv", mrb_basicsocket_recv, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   // #recvmsg(maxlen, flags=0)
   mrb_define_method(mrb, bsock, "send", mrb_basicsocket_send, MRB_ARGS_REQ(2)|MRB_ARGS_OPT(1));
