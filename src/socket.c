@@ -6,18 +6,19 @@
 
 #include "mruby.h"
 #include <sys/types.h>
+#include <fcntl.h>
 #ifndef _WIN32
 # include <sys/socket.h>
 # include <sys/un.h>
 # include <netinet/in.h>
 # include <netinet/tcp.h>
 # include <arpa/inet.h>
-# include <fcntl.h>
 # include <netdb.h>
 # include <unistd.h>
 #else
 # define _WIN32_WINNT 0x0600
 # include <ws2tcpip.h>
+# include <io.h>
 #endif
 #include <stddef.h>
 #include <string.h>
@@ -78,6 +79,16 @@ inet_pton(int af, const char *src, void *dst) {
   return inet_aton(src, dst);
 }
 # endif
+#endif
+
+#ifdef _WIN32
+# define fileno_to_fd(s) _get_osfhandle((s))
+# define new_fileno_from_fd(s) _open_osfhandle((s), O_RDWR|O_BINARY)
+typedef SOCKET mrb_socket_t;
+#else
+# define fileno_to_fd(s) (s)
+# define new_fileno_from_fd(s) ((s))
+typedef int mrb_socket_t;
 #endif
 
 static mrb_value
@@ -230,14 +241,14 @@ sa2addrlist(mrb_state *mrb, const struct sockaddr *sa, socklen_t salen)
   return ary;
 }
 
-static int
+static mrb_socket_t
 socket_fd(mrb_state *mrb, mrb_value sock)
 {
-  return mrb_fixnum(mrb_funcall(mrb, sock, "fileno", 0));
+  return fileno_to_fd(mrb_fixnum(mrb_funcall(mrb, sock, "fileno", 0)));
 }
 
 static int
-socket_family(int s)
+socket_family(mrb_socket_t s)
 {
   struct sockaddr_storage ss;
   socklen_t salen;
@@ -255,7 +266,7 @@ mrb_basicsocket_getpeereid(mrb_state *mrb, mrb_value self)
   mrb_value ary;
   gid_t egid;
   uid_t euid;
-  int s;
+  mrb_socket_t s;
   
   s = socket_fd(mrb, self);
   if (getpeereid(s, &euid, &egid) != 0)
@@ -300,7 +311,8 @@ mrb_basicsocket_getsockname(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
 { 
-  int opt, s;
+  int opt;
+  mrb_socket_t s;
   mrb_int family, level, optname;
   mrb_value c, data;
   socklen_t optlen;
@@ -322,7 +334,7 @@ static mrb_value
 mrb_basicsocket_close(mrb_state *mrb, mrb_value self) {
   struct mrb_io *fptr = (struct mrb_io *)DATA_PTR(self);
   if (fptr->fd >= 0) {
-    closesocket((SOCKET)fptr->fd);
+    closesocket(fileno_to_fd(fptr->fd));
     fptr->fd = -1;
   }
   return mrb_nil_value();
@@ -391,7 +403,8 @@ mrb_basicsocket_send(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
 { 
-  int fd, flags;
+  mrb_socket_t fd;
+  int flags;
   mrb_value bool;
 
   mrb_get_args(mrb, "o", &bool);
@@ -416,7 +429,8 @@ mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_basicsocket_setsockopt(mrb_state *mrb, mrb_value self)
 { 
-  int argc, s;
+  int argc;
+  mrb_socket_t s;
   mrb_int level = 0, optname;
   mrb_value optval, so;
 
@@ -515,7 +529,7 @@ mrb_ipsocket_recvfrom(mrb_state *mrb, mrb_value self)
   socklen_t socklen;
   mrb_value a, buf, pair;
   mrb_int flags, maxlen, n;
-  int fd;
+  mrb_socket_t fd;
 
   fd = socket_fd(mrb, self);
   flags = 0;
@@ -557,21 +571,21 @@ static mrb_value
 mrb_socket_accept(mrb_state *mrb, mrb_value klass)
 {
   mrb_value ary, sastr;
-  int s1;
+  mrb_socket_t s1;
   mrb_int s0;
   socklen_t socklen;
 
   mrb_get_args(mrb, "i", &s0);
   socklen = sizeof(struct sockaddr_storage);
   sastr = mrb_str_buf_new(mrb, socklen);
-  s1 = accept(s0, (struct sockaddr *)RSTRING_PTR(sastr), &socklen);
+  s1 = accept(fileno_to_fd(s0), (struct sockaddr *)RSTRING_PTR(sastr), &socklen);
   if (s1 == -1) {
     mrb_sys_fail(mrb, "accept");
   }
   // XXX: possible descriptor leakage here!
   mrb_str_resize(mrb, sastr, socklen);
   ary = mrb_ary_new_capa(mrb, 2);
-  mrb_ary_push(mrb, ary, mrb_fixnum_value(s1));
+  mrb_ary_push(mrb, ary, mrb_fixnum_value(new_fileno_from_fd(s1)));
   mrb_ary_push(mrb, ary, sastr);
   return ary;
 }
@@ -583,7 +597,7 @@ mrb_socket_bind(mrb_state *mrb, mrb_value klass)
   mrb_int s;
 
   mrb_get_args(mrb, "iS", &s, &sastr);
-  if (bind(s, (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
+  if (bind(fileno_to_fd(s), (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
     mrb_sys_fail(mrb, "bind");
   }
   return mrb_nil_value();
@@ -596,7 +610,7 @@ mrb_socket_connect(mrb_state *mrb, mrb_value klass)
   mrb_int s;
 
   mrb_get_args(mrb, "iS", &s, &sastr);
-  if (connect(s, (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
+  if (connect(fileno_to_fd(s), (struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr)) == -1) {
     mrb_sys_fail(mrb, "connect");
   }
   return mrb_nil_value();
@@ -608,7 +622,7 @@ mrb_socket_listen(mrb_state *mrb, mrb_value klass)
   mrb_int backlog, s;
 
   mrb_get_args(mrb, "ii", &s, &backlog);
-  if (listen(s, backlog) == -1) {
+  if (listen(fileno_to_fd(s), backlog) == -1) {
     mrb_sys_fail(mrb, "listen");
   }
   return mrb_nil_value();
@@ -680,7 +694,17 @@ mrb_socket_socket(mrb_state *mrb, mrb_value klass)
   int s;
 
   mrb_get_args(mrb, "iii", &domain, &type, &protocol);
-  s = socket(domain, type, protocol);
+#ifdef _WIN32
+  {
+    int sockopt = 0, optlen = sizeof sockopt;
+    getsockopt(INVALID_SOCKET, SOL_SOCKET, 0x7008/*SO_OPENTYPE*/, (char *)&sockopt, &optlen);
+    if ((sockopt & 0x20/*SO_SYNCHRONOUS_NONALERT*/) == 0) {
+      sockopt = 0x20;/*SO_SYNCHRONOUS_NONALERT*/
+      setsockopt(INVALID_SOCKET, SOL_SOCKET, 0x7008/*SO_OPENTYPE*/, (char *)&sockopt, sizeof(sockopt));
+    }
+  }
+#endif
+  s = new_fileno_from_fd(socket(domain, type, protocol));
   if (s == -1)
     mrb_sys_fail(mrb, "socket");
   return mrb_fixnum_value(s);
