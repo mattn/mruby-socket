@@ -14,6 +14,7 @@
 # include <fcntl.h>
 # include <netdb.h>
 #else
+# undef _WIN32_WINNT
 # define _WIN32_WINNT 0x0600
 # include <ws2tcpip.h>
 #endif
@@ -34,8 +35,9 @@
 #ifdef _WIN32
 # define SHUT_RDWR SD_BOTH
 # define AI_NUMERICSERV AI_NUMERICHOST
-# define inet_pton(x,y,z) InetPton(x,y,z)
 # define sockaddr_un sockaddr
+# if defined(__GNUC__) && __GNUC__ < 4 && __GNUC_MINOR__ < 9
+#  define inet_pton(x,y,z) InetPton(x,y,z)
 const char*
 inet_ntop(int af, const void* src, char* dst, int cnt) {
   struct sockaddr_in srcaddr;
@@ -51,6 +53,7 @@ inet_ntop(int af, const void* src, char* dst, int cnt) {
   }
   return dst;
 }
+
 int
 inet_aton(const char *cp, struct in_addr *addr) {
   addr->s_addr = inet_addr(cp);
@@ -64,6 +67,7 @@ inet_pton(int af, const char *src, void *dst) {
   }
   return inet_aton(src, dst);
 }
+#  endif
 #endif
 
 static mrb_value
@@ -286,7 +290,12 @@ mrb_basicsocket_getsockname(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
 { 
-  int opt, s;
+#ifndef _WIN32
+  int opt;
+#else
+  char opt;
+#endif
+  int s;
   mrb_int family, level, optname;
   mrb_value c, data;
   socklen_t optlen;
