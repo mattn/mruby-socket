@@ -48,8 +48,9 @@
 #  define AI_NUMERICSERV AI_NUMERICHOST
 # endif
 # define sockaddr_un sockaddr
-# if defined(__GNUC__) && __GNUC__ <= 4 && __GNUC_MINOR__ < 9 || ((NTDDI_VERSION < NTDDI_VISTA) && defined(_MSC_VER))
-#  define inet_pton(x,y,z) InetPton(x,y,z)
+# ifdef InetNtop
+#  define inet_ntop(w,x,y,z) InetNtop(w,x,y,z)
+# else
 const char*
 inet_ntop(int af, const void* src, char* dst, int cnt) {
   struct sockaddr_in srcaddr;
@@ -65,12 +66,21 @@ inet_ntop(int af, const void* src, char* dst, int cnt) {
   }
   return dst;
 }
+# endif
 
+# ifdef InetAton
+#  define inet_aton(x,y) InetAton(x,y)
+# else
 int
 inet_aton(const char *cp, struct in_addr *addr) {
   addr->s_addr = inet_addr(cp);
   return (addr->s_addr == INADDR_NONE) ? 0 : 1;
 }
+# endif
+
+# ifdef InetPton
+#  define inet_pton(x,y,z) InetPton(x,y,z)
+# else
 int
 inet_pton(int af, const char *src, void *dst) {
   if (af != AF_INET) {
@@ -98,16 +108,13 @@ static mrb_value
 mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
 {
   struct addrinfo hints, *res0, *res;
-  struct sockaddr_un sock_un;
-  mrb_value ai, ary, family, lastai, nodename, protocol, s, sa, service, socktype;
+  mrb_value ai, ary, family, lastai, nodename, protocol, sa, service, socktype;
   mrb_int flags;
   int arena_idx, error;
   const char *hostname = NULL, *servname = NULL;
 
   ary = mrb_ary_new(mrb);
   arena_idx = mrb_gc_arena_save(mrb);  /* ary must be on arena! */
-
-  s = mrb_str_new(mrb, (void *)&sock_un, sizeof(sock_un));
 
   family = socktype = protocol = mrb_nil_value();
   flags = 0;
@@ -406,6 +413,7 @@ mrb_basicsocket_send(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
 { 
+#ifndef _WIN32
   mrb_socket_t fd;
   int flags;
   mrb_value bool;
@@ -413,7 +421,6 @@ mrb_basicsocket_setnonblock(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &bool);
   fd = socket_fd(mrb, self);
 
-#ifndef _WIN32
   flags = fcntl(fd, F_GETFL, 0);
   if (flags == 1)
     mrb_sys_fail(mrb, "fcntl");
