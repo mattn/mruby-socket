@@ -16,6 +16,7 @@
 # include <netdb.h>
 # include <unistd.h>
 #else
+# undef _WIN32_WINNT
 # define _WIN32_WINNT 0x0600
 # include <ws2tcpip.h>
 # include <io.h>
@@ -46,15 +47,9 @@
 # ifndef AI_NUMERICSERV
 #  define AI_NUMERICSERV AI_NUMERICHOST
 # endif
-# define inet_pton(x,y,z) InetPton(x,y,z)
 # define sockaddr_un sockaddr
-
-int
-inet_aton(const char *cp, struct in_addr *addr) {
-  addr->s_addr = inet_addr(cp);
-  return (addr->s_addr == INADDR_NONE) ? 0 : 1;
-}
-# if (NTDDI_VERSION < NTDDI_VISTA) || !defined(_MSC_VER)
+# if defined(__GNUC__) && __GNUC__ <= 4 && __GNUC_MINOR__ < 9 || ((NTDDI_VERSION < NTDDI_VISTA) && defined(_MSC_VER))
+#  define inet_pton(x,y,z) InetPton(x,y,z)
 const char*
 inet_ntop(int af, const void* src, char* dst, int cnt) {
   struct sockaddr_in srcaddr;
@@ -70,6 +65,12 @@ inet_ntop(int af, const void* src, char* dst, int cnt) {
   }
   return dst;
 }
+
+int
+inet_aton(const char *cp, struct in_addr *addr) {
+  addr->s_addr = inet_addr(cp);
+  return (addr->s_addr == INADDR_NONE) ? 0 : 1;
+}
 int
 inet_pton(int af, const char *src, void *dst) {
   if (af != AF_INET) {
@@ -84,10 +85,12 @@ inet_pton(int af, const char *src, void *dst) {
 #ifdef _WIN32
 # define fileno_to_fd(s) _get_osfhandle((s))
 # define new_fileno_from_fd(s) _open_osfhandle((s), O_RDWR|O_BINARY)
+# define OPTTYPE(x) (char *)(x)
 typedef SOCKET mrb_socket_t;
 #else
 # define fileno_to_fd(s) (s)
 # define new_fileno_from_fd(s) ((s))
+# define OPTTYPE(x) (x)
 typedef int mrb_socket_t;
 #endif
 
@@ -320,7 +323,7 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "ii", &level, &optname);
   s = socket_fd(mrb, self);
   optlen = sizeof(opt);
-  if (getsockopt(s, level, optname, &opt, &optlen) == -1)
+  if (getsockopt(s, level, optname, OPTTYPE(&opt), &optlen) == -1)
     mrb_sys_fail(mrb, "getsockopt");
   c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
   family = socket_family(s);
